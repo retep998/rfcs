@@ -18,7 +18,7 @@ that uses unions to be significantly easier. The syntax chosen here replicates e
 An unsafe enum is equivalent to a safe enum except that it does not have a discriminant.
 
 ## Declaring an unsafe enum
-
+Syntax matches that of defining an enum, except with the unsafe keyword at the beginning.
 ```rust
 unsafe enum MyEnum {
     Variant1(c_int),
@@ -79,11 +79,16 @@ unsafe {
 }
 ```
 
-## Requirements on variants
+## Drop
+Because there is no way for Rust to know which variant is initialized as there is no tag, unsafe enums will not drop their contents and will always be `!Drop` by default. Implementing `Drop` yourself is allowed, although questionable as your own `Drop` impl likely doesn't know which variant is initialized either. Typically you'd have the unsafe enum wrapped in a higher level struct that provides a safe interface and keeps track of which variant is initialized as well as handling `Drop`.
 
-Due to the lack of a discriminant there is no way for Rust to know which variant is currently
-initialized, and thus all variants of an unsafe enum are required to be `Copy` or at the very least
-not `Drop`.
+Note that this does mean unsafe enums can be used to implement `ManuallyDrop`.
+
+## Representation
+As with existing structs and enums, the layout of an unsafe enum is unspecified and accessing a variant other than what was initialized is undefined behavior. The unsafe enum can be defined with `#[repr(C)]` which makes the representation well specified as matching the behavior of C on that platform. In that case, accessing a variant other than what it was initialized with is as legal as using transmute.
+
+## Derived traits
+The marker traits `Send` `Sync` will be automatically implemented if all variants implement them. `#[derive(Copy)]` can be performed if all variants are `Copy`. Pretty much all the traits that actually do things like `Clone` and `PartialEq` cannot be derived as the implementation would not know which variant is currently initialized and thus be unable to perform its job.
 
 # Drawbacks
 
@@ -92,8 +97,9 @@ Adding unsafe enums adds more complexity to the language through a separate kind
 # Alternatives
 
 * Continue to not provide untagged unions and make life difficult for people doing FFI.
-* Add an entirely separate type with a keyword such as `union`.
+* Instead of `unsafe enum` we can use an entirely new keyword `union`.
+* Instead of `unsafe enum`, just do `enum` but with an attribute such as `#[repr(union)]`.
 
 # Unresolved questions
 
-* Should we require that the variants are merely `!Drop` or should we require `Copy`, or, as @eddyb suggested, should we add an opt in built in trait that represents a type where every possible bit pattern is a valid value for that type? With the latter option we would be able to make destructuring completely safe.
+* Should there be restrictions on the types of variants that are allowed? Should only `Copy` types be allowed?
